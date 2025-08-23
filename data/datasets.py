@@ -1,60 +1,106 @@
 """
 @brief: Dataset utils for SARRARP50 dataset
-
 """
-import pytorch_lightning as pl
-from os.path import basename
-from torch.utils.data import Dataset
 
+import numpy as np
+import pytorch_lightning as pl
+
+from PIL import Image
+from os.path import basename, dirname
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+
+from helpers.image import overlay_segmentation
 from data.transforms import get_transforms
 
 
 class SARRARP50Dataset(Dataset):
-    def __init__(self, root_data_dir: str, listfile: str, config: dict):
+    def __init__(self, config: dict):
         """
         Dataloader for SARRARP50 dataset.
-        Here we load the samples from disk during __getitem__ as the whole training set will not fit in RAM.
-        Using multiple worker processes will help.
 
         Args:
-            root_data_dir (str): Root directory of the dataset containing the video data.
-            listfile (str): Each element in the list has the format "video_yyy/rgb/xxxxxxx.png"
-            config (dict): Dataset config
+            config (dict): Dataset config, contains the following fields:
+                listfile (str): List of (segmentation) samples used by the dataset. 
+                load_strategy (str): 'ram' or 'disk'.
+                img_transforms (list): List of image transforms.
+                label_transforms (list): List of label transforms.
         """
         self.config = config
-        self.transforms = get_transforms(self.config['transforms'])
-        self.root_data_dir = root_data_dir
-        self.index = self._make_index(listfile)
+        self.img_transforms = get_transforms(self.config['img_transforms'])
+        self.load_strategy = self.config.get('load_strategy', 'ram')
+        if self.load_strategy not in ['ram', 'disk']:
+            raise ValueError(f"Unknown load strategy: {self.load_strategy}")
+        self.index = self._make_index(self.config['listfile'])
 
     def _make_index(self, listfile: str):
         all_samples = [x.strip() for x in open(listfile, 'r').readlines()]
         index = []
         for sample in all_samples:
-            video_folder = sample.split('/')[0]
-            img = f"{self.root_data_dir}/{sample}"
-            label = f"{self.root_data_dir}/{video_folder}/segmentation/{basename(sample)}"
-            index.append((img, label))
+            img_path = f"{dirname(dirname(sample))}/rgb/{basename(sample)}"
+
+            if self.load_strategy == 'ram':
+                img, label = [np.array(Image.open(x)) for x in [img_path, sample]]
+                index.append((img, label))
+
+            elif self.load_strategy == 'disk':
+                index.append((img_path, sample))
         return index
 
     def __getitem__(self, index):
         img, label = self.index[index]
+        if self.load_strategy == 'disk':
+            img = Image.open(img)
+            label = Image.open(label)
+
+        img, label = self.img_transforms(img, label)
+        # Safety check
+        # overlay = overlay_segmentation(img, label, label, 10)
+        # Image.fromarray(overlay).save(f"transformed_img_{index}.png")
+
+        return img, label
 
     def __len__(self):
-        return super().__len__()
+        return len(self.index)
 
 
-class DataModule(pl.LightningDataModule):
-    def __init__(self, config_path: str):
+class SARRARP50DataModule(pl.LightningDataModule):
+    def __init__(self, config: dict):
         super().__init__()
-        self.config = yaml.safe_load(open(config_path, 'r'))
-        self.batch_size = self.config['training_opts']['batch_size']
+        self.config = config
 
     def train_dataloader(self):
-        transform = transforms.Compose([transforms.ToTensor()])
-        dataset = MNIST(root='data', train=True, download=True, transform=transform)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        train_dataset_cfg = self.config['data_opts']['train_dataset']
+        dataset = SARRARP50Dataset(config=train_dataset_cfg)
+        return DataLoader(dataset,
+            batch_size=train_dataset_cfg['batch_size'],
+            shuffle=True,
+            num_workers=train_dataset_cfg['num_workers'],
+            pin_memory=True,
+            drop_last=True
+        )
 
     def val_dataloader(self):
-        transform = transforms.Compose([transforms.ToTensor()])
-        dataset = MNIST(root='data', train=False, download=True, transform=transform)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+        val_dataset_cfg = self.config['data_opts']['val_dataset']
+        dataset = SARRARP50Dataset(config=val_dataset_cfg)
+        return DataLoader(dataset,
+            batch_size=val_dataset_cfg['batch_size'],
+            shuffle=False,
+            num_workers=val_dataset_cfg['num_workers'],
+            pin_memory=True,
+            drop_last=False
+        )
+
+    def test_dataloader(self):
+        if 'test_dataset' not in self.config:
+            return None
+
+        test_dataset_cfg = self.config['data_opts']['test_dataset']
+        dataset = SARRARP50Dataset(config=test_dataset_cfg)
+        return DataLoader(dataset,
+            batch_size=test_dataset_cfg['batch_size'],
+            shuffle=False,
+            num_workers=test_dataset_cfg['num_workers'],
+            pin_memory=True,
+            drop_last=False
+        )

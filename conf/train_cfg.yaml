@@ -1,0 +1,77 @@
+# Will be defined in the CLI
+exp_name: CLI_PARAM
+log_dir: CLI_PARAM
+
+training_opts:
+    max_epochs: 100
+    batch_size: 16
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    optimizer: adam
+    scheduler: cosine
+    seed: 42
+
+data_opts:
+  train_dataset:
+    batch_size: 128
+    num_workers: 0
+    load_strategy: 'disk'
+    listfile: CLI_PARAM
+    img_transforms:
+      - name : resize
+        size: [640, 640]
+      - name: to_tensor 
+      - name: normalize
+        mean: 0.5
+        std: 0.5
+      - name: random_horizontal_flip
+        p: 0.1
+      - name: random_vertical_flip
+        p: 1
+      - name: random_gaussian_blur
+        p: 1
+        kernel_size: 3
+      - name: random_color_jitter
+        p: 1
+        brightness: 0.2
+        contrast: 0.2
+        saturation: 0.2
+
+  val_dataset:
+    batch_size: 32
+    num_workers: 0
+    listfile: CLI_PARAM
+    load_strategy: 'disk'
+    img_transforms:
+      - name : resize
+        size: [640, 640]
+      - name: to_tensor 
+      - name: normalize
+        mean: 0.5
+        std: 0.5
+
+model_opts:
+  MASK_FORMER:
+    # loss
+    DEEP_SUPERVISION: True
+    NO_OBJECT_WEIGHT: 0.1
+    CLASS_WEIGHT: 1.0
+    DICE_WEIGHT: 1.0
+    MASK_WEIGHT: 20.0
+
+    # transformer config
+    NHEADS: 8
+    DROPOUT: 0.1
+    DIM_FEEDFORWARD: 2048
+    ENC_LAYERS: 0
+    DEC_LAYERS: 6
+    PRE_NORM: False
+    HIDDEN_DIM: 256
+    NUM_OBJECT_QUERIES: 10
+
+    TRANSFORMER_IN_FEATURE: "res5"
+    ENFORCE_INPUT_PROJ: False
+
+    TRAIN_NUM_POINTS: 12544
+    OVERSAMPLE_RATIO: 3.0
+    IMPORTANCE_SAMPLE_RATIO: 0.75

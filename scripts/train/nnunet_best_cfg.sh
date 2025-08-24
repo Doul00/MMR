@@ -1,5 +1,9 @@
 #!/bin/bash
 
+#######################
+# Find the best configuration for the nnUNet model (after training)
+#######################
+
 NNUNET_ROOT=/nfs/home/aamadou/Data/SAR_RARP50/nnUNet
 export nnUNet_raw=$NNUNET_ROOT/nnUNet_raw
 export nnUNet_preprocessed=$NNUNET_ROOT/nnUNet_preprocessed

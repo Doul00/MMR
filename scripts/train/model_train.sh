@@ -1,17 +1,21 @@
 #!/bin/bash
 
+#######################
+# Train the Mask2Former model
+#######################
+
 ROOT_DIR=$(dirname $(dirname $(dirname $(realpath $0))))
 
-SPLITS_DIR=$ROOT_DIR/data/splits
 LOG_DIR=/nfs/home/aamadou/Projects/MMR/output/logs
 
-DEBUG_TRAIN_FILE=$ROOT_DIR/data/splits_final/train_debug.txt
-DEBUG_VAL_FILE=$ROOT_DIR/data/splits_final/val_debug.txt
+# DEBUG_TRAIN_FILE=$ROOT_DIR/data/splits_final/debug/train.txt
+# DEBUG_VAL_FILE=$ROOT_DIR/data/splits_final/debug/val.txt
 
-FOLD_TRAIN_FILE=$ROOT_DIR/data/splits_final/train.txt
-FOLD_VAL_FILE=$ROOT_DIR/data/splits_final/val.txt
+FOLD_NUM=$1
+FOLD_TRAIN_FILE=$ROOT_DIR/data/splits_final/fold_${FOLD_NUM}/train.txt
+FOLD_VAL_FILE=$ROOT_DIR/data/splits_final/fold_${FOLD_NUM}/val.txt
 
-EXP_NAME=train-m2f-full-aug
+EXP_NAME=train-m2f-full-aug-fold-${FOLD_NUM}
 
 # Compile and install custom DeformableAttention CUDA kernel
 # You can comment it if done once - left uncommented as this needs to be done everytime

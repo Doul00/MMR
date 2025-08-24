@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOT_DIR=$(dirname $(dirname $(pwd)))/code
+ROOT_DIR=$(dirname $(dirname $(dirname $(realpath $0))))
 export PYTHONPATH=$ROOT_DIR
 
 

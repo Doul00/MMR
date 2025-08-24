@@ -3,8 +3,9 @@ exp_name: CLI_PARAM
 log_dir: CLI_PARAM
 
 testing_opts:
-  test_minibatch_size: 32
+  test_minibatch_size: 16
   final_image_size_hw: [1080, 1920]
+  save_dir: CLI_PARAM
 
 training_opts:
     max_epochs: 100
@@ -17,7 +18,6 @@ data_opts:
   train_dataset:
     batch_size: 8 
     num_workers: 8
-    load_strategy: 'disk'
     listfile: CLI_PARAM
     img_transforms:
       - name : resize
@@ -41,7 +41,6 @@ data_opts:
     batch_size: 16
     num_workers: 8
     listfile: CLI_PARAM
-    load_strategy: 'disk'
     img_transforms:
       - name : resize
         size: [512, 960]
@@ -54,7 +53,6 @@ data_opts:
     batch_size: 1
     num_workers: 8
     listfile: CLI_PARAM
-    load_strategy: 'disk'
     img_transforms:
       - name : resize
         size: [512, 960]

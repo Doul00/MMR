@@ -6,38 +6,20 @@ import os
 import torch
 import numpy as np
 import pytorch_lightning as pl
-import multiprocessing as mp
 
 from os.path import basename, dirname
+from multiprocessing import Pool
 from PIL import Image
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 from omegaconf import DictConfig
 from torch.nn import functional as F
 from detectron2.structures import Instances
-from moviepy import ImageSequenceClip
-from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau, LambdaLR, SequentialLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
+from concurrent.futures import ThreadPoolExecutor
 
 from data.definitions import SEG_LABELS
 from model.model import ToolSegmenterModel
 from helpers.image import overlay_segmentation
-
-
-def linear_warmup_cosine_annealing(optimizer, max_steps: int, warmup_steps: int, eta_min: float =0):
-
-    def warmup_fn(step):
-        if step >= warmup_steps:
-            return 1.0
-        return step / warmup_steps
-
-    warmup_scheduler = LambdaLR(optimizer, lr_lambda=warmup_fn)
-    cosine_scheduler = CosineAnnealingLR(optimizer, T_max=max_steps - warmup_steps, eta_min=eta_min)
-
-    scheduler = SequentialLR(
-        optimizer,
-        schedulers=[warmup_scheduler, cosine_scheduler],
-        milestones=[warmup_steps]
-    )
-    return scheduler
 
 
 class ToolSegmenterModule(pl.LightningModule):
@@ -56,13 +38,16 @@ class ToolSegmenterModule(pl.LightningModule):
         if 'testing_opts' in self.config:
             self._test_minibatch_size = self.config['testing_opts']['test_minibatch_size']
             self._test_final_image_size_hw = self.config['testing_opts']['final_image_size_hw']
+            self._test_save_dir = self.config['testing_opts']['save_dir']
         else:
-            self._test_minibatch_size = 32
+            self._test_minibatch_size = 16
             self._test_final_image_size_hw = [1080, 1920]
+            self._test_save_dir = "test_results"
 
     def _targets_to_instances(self, mask: torch.Tensor) -> Instances:
         """
         Given a segmentation mask, create binary masks for each class and store it into an Instances object.
+        Required for compatibility with Mask2Former loss
         Args:
             mask: a tensor of shape (1, H, W) containing the labels.
         Returns:
@@ -122,7 +107,7 @@ class ToolSegmenterModule(pl.LightningModule):
 
         # Log results to tensorboard for visualization
         if batch_idx % 10 == 0:
-            processed_results = self._postprocess_outputs(imgs, outputs)
+            processed_results = self._postprocess_outputs(outputs, (imgs.shape[-2], imgs.shape[-1]), "bilinear")
             processed_results = torch.stack([result.argmax(dim=0) for result in processed_results])
             rand_indexes = torch.randint(0, len(processed_results), (3,))
             all_overlays = []
@@ -139,29 +124,6 @@ class ToolSegmenterModule(pl.LightningModule):
         return total_loss
 
 
-    def _save_video_predictions(self, imgs, masks, preds, mask_names, predictions_dir, visualizations_dir):
-        """
-        Saves the predictions for a video.
-        Args:
-            imgs: a tensor of shape (N, C, H, W) containing the images
-            masks: a tensor of shape (N, 1, H, W) containing the masks
-            preds: a tensor of shape (N, H, W) containing the predictions
-            mask_names: a list of strings containing the names of the masks
-            predictions_dir: a string containing the directory to save the predictions
-        """
-        os.makedirs(predictions_dir, exist_ok=True)
-        os.makedirs(visualizations_dir, exist_ok=True)
-
-        # Do final predictions upsampling
-        preds = preds.unsqueeze(1).to(torch.uint8)
-        pred_upsampled = F.interpolate(preds, size=(self._test_final_image_size_hw[0], self._test_final_image_size_hw[1]), mode="nearest-exact")
-        pred_upsampled = pred_upsampled.cpu().numpy()
-        for i in range(pred_upsampled.shape[0]):
-            pred_upsampled_i = np.repeat(pred_upsampled[i], 3, axis=0)
-            pred_upsampled_i = pred_upsampled_i.transpose(1, 2, 0)
-            Image.fromarray(pred_upsampled_i).save(os.path.join(predictions_dir, basename(mask_names[i])))
-
-
     def test_step(self, batch, batch_idx):
         """
         Runs prediction on a list of ordered frames of a video.
@@ -171,12 +133,13 @@ class ToolSegmenterModule(pl.LightningModule):
                 "images": a tensor of shape (N, C, H, W) containing the images
                 "masks": a tensor of shape (N, 1, H, W) containing the masks
         """
-        imgs = batch['images'][0] # PL lightning returns a 5D tensor here due to the batch size of 1
+        imgs = batch['images'][0] # PL lightning returns a 5D tensor here
         num_batches = imgs.shape[0] // self._test_minibatch_size
         if imgs.shape[0] % self._test_minibatch_size != 0:
             num_batches += 1
 
         outputs = []
+        # Prevent OOMs on long sequences
         for i in range(num_batches):
             imgs_batch = imgs[i * self._test_minibatch_size:(i + 1) * self._test_minibatch_size]
             b_out = self.model(imgs_batch)
@@ -185,67 +148,87 @@ class ToolSegmenterModule(pl.LightningModule):
         # Merge output dicts
         merged_outputs = {}
         for ok in ['pred_logits', 'pred_masks']:
-            merged_outputs[ok] = torch.cat([o[ok] for o in outputs], dim=0)
+            merged_outputs[ok] = torch.cat([o[ok] for o in outputs], dim=0).to('cpu')
 
-        processed_results = self._postprocess_outputs(imgs, merged_outputs)
+        # Free GPU memory
+        del outputs
+
+        resize_sz = [self._test_final_image_size_hw[0], self._test_final_image_size_hw[1]]
+        processed_results = self._postprocess_outputs(merged_outputs, resize_sz, "bilinear")
         processed_results = torch.stack([result.argmax(dim=0) for result in processed_results])
-        self._test_results.append(processed_results)
-        self._test_samples.append(batch)
 
-    def on_test_epoch_end(self):
-        """Processes the test results and saves the predictions and visualizations."""
+        preds_dir = self._test_save_dir + "/predictions"
+        mask_names = [y for x in batch['mask_names'] for y in x]
+        video_name = basename(dirname(dirname(mask_names[0])))
 
-        logger = self.logger
-        log_dir = logger.log_dir
-        preds_dir = log_dir + "/test_results/predictions"
-        viz_dir = log_dir + "/test_results/visualizations"
-        os.makedirs(preds_dir, exist_ok=True)
-        os.makedirs(viz_dir, exist_ok=True)
+        case_preds_dir = os.path.join(preds_dir, video_name, 'segmentation')
+        os.makedirs(case_preds_dir, exist_ok=True)
+        # Do this in a thread
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(self._save_video_predictions, mask_names, processed_results, case_preds_dir)
 
-        pool_args = []
-        for i in range(len(self._test_samples)):
-            batch = self._test_samples[i]
-            imgs = batch['images'][0]
-            masks = batch['masks'][0]
-            mask_names = [y for x in batch['mask_names'] for y in x]
-            video_name = basename(dirname(dirname(mask_names[0])))
-            preds = self._test_results[i]
 
-            preds_dir = os.path.join(preds_dir, video_name, 'segmentation')
-            viz_dir = os.path.join(viz_dir, video_name)
-            pool_args.append((imgs, masks, preds, mask_names, preds_dir, viz_dir))
+    def _save_video_predictions(self, mask_names: List[str], preds: torch.Tensor, case_preds_dir: str):
+        preds_np = preds.cpu().numpy()
+        for j in range(preds_np.shape[0]):
+            pred_upsampled_i = np.repeat(preds_np[j][None], 3, axis=0)
+            pred_upsampled_i = pred_upsampled_i.transpose(1, 2, 0).astype(np.uint8)
+            Image.fromarray(pred_upsampled_i).save(os.path.join(case_preds_dir, basename(mask_names[j])))
 
-        # self._save_video_predictions(*pool_args[0])
-        with mp.Pool(processes=8) as pool:
-            pool.map(self._save_video_predictions, pool_args)
+        print(f"Finished saving video predictions in dir {case_preds_dir}")
 
-    def _postprocess_outputs(self, imgs: torch.Tensor, outputs: Dict[str, torch.Tensor]) -> torch.Tensor:
+
+    @torch.no_grad()
+    def _postprocess_outputs(self, outputs: Dict[str, torch.Tensor], resize_sz: Tuple[int, int], interp_mode: str) -> torch.Tensor:
         """
         Args:
-            imgs: a tensor of shape (B, C, H, W)
             outputs: a dict containing the following keys:
                 "pred_logits": a tensor of shape (B, Q, K+1)
-                "pred_masks": a tensor of shape (B, K, H, W)
+                "pred_masks": a tensor of shape (B, Q, H, W)
                 With Q the number of queries and K+1 the number of classes + no object class
+            resize_sz: Tuple (H, W) to resize to
+            interp_mode: interpolation mode
         Returns:
             a tensor of shape (B, K, H, W) containing the logits of the segmentation masks
         """
-        mask_cls_results = outputs["pred_logits"]
-        mask_pred_results = outputs["pred_masks"]
-        # upsample masks
-        mask_pred_results = F.interpolate(
+        mask_cls_results = outputs["pred_logits"].to('cpu')
+        mask_pred_results = outputs["pred_masks"].to('cpu')
+
+        upsampled_results = []
+        align_corners = False if interp_mode in ['bilinear', 'bicubic'] else None
+
+        # Prevent OOMs when upsampling
+        # upsampling_bs = 4
+        # num_batches = mask_pred_results.shape[0] // self._test_minibatch_size
+        # if mask_pred_results.shape[0] % self._test_minibatch_size != 0:
+        #     num_batches += 1
+
+        # for i in range(num_batches):
+        #     mask_pred_results_batch = mask_pred_results[i * self._test_minibatch_size:(i + 1) * self._test_minibatch_size]
+        #     mask_pred_results_batch = F.interpolate(
+        #         mask_pred_results_batch,
+        #         size=resize_sz,
+        #         mode=interp_mode,
+        #         align_corners=align_corners,
+        #     )
+        #     upsampled_results.append(mask_pred_results_batch.to('cpu'))
+        # upsampled_results = torch.cat(upsampled_results, dim=0) # (B, Q, H, W)
+
+        upsampled_results = F.interpolate(
             mask_pred_results,
-            size=(imgs.shape[-2], imgs.shape[-1]),
-            mode="bilinear",
-            align_corners=False,
-        )
+            size=resize_sz,
+            mode=interp_mode,
+            align_corners=align_corners,
+        ).to('cpu')
 
         processed_results = []
         for mask_cls_result, mask_pred_result in zip(
-            mask_cls_results, mask_pred_results
+            mask_cls_results, upsampled_results
         ):
 
-            r = self.model.semantic_inference(mask_cls_result, mask_pred_result)
+            # on GPU for einsum
+            r = self.model.semantic_inference(mask_cls_result.to('cuda'), mask_pred_result.to('cuda'))
+            r = r.to('cpu')
             processed_results.append(r)
 
         return processed_results
@@ -265,8 +248,6 @@ class ToolSegmenterModule(pl.LightningModule):
                 scheduler = CosineAnnealingLR(optimizer, T_max=self.config['training_opts']['max_epochs'], eta_min=1e-7)
             elif self.config['training_opts']['scheduler'] == 'plateau':
                 scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
-            elif self.config['training_opts']['scheduler'] == 'linear_warmup_cosine_annealing':
-                scheduler = linear_warmup_cosine_annealing(optimizer, max_steps=self.config['training_opts']['max_epochs'], warmup_steps=20, eta_min=1e-7)
             else:
                 raise ValueError(f"Scheduler {self.config['training_opts']['scheduler']} not supported")
             result_dict['lr_scheduler'] = {

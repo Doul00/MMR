@@ -17,28 +17,23 @@ from data.transforms import get_transforms
 
 
 class SARRARP50Dataset(Dataset):
-    def __init__(self, config: dict, is_test: bool = False):
+    def __init__(self, config: dict, is_test: bool = False, **kwargs):
         """
         Dataloader for SARRARP50 dataset.
 
         Args:
             config (dict): Dataset config, contains the following fields:
                 listfile (str): List of (segmentation) samples used by the dataset. 
-                load_strategy (str): 'ram' or 'disk'.
                 img_transforms (list): List of image transforms.
                 label_transforms (list): List of label transforms.
             is_test (bool): Whether the dataset is for testing - Changes the way the index is loaded since we send the full video frames
         """
         self.config = config
         self.img_transforms = get_transforms(self.config['img_transforms'])
-        self.load_strategy = self.config.get('load_strategy', 'ram')
-        if self.load_strategy not in ['ram', 'disk']:
-            raise ValueError(f"Unknown load strategy: {self.load_strategy}")
         self.is_test = is_test
         if self.is_test:
             # Index only stores segmentation paths
             self.index = self._make_index_test(self.config['listfile'])
-            self.load_strategy = 'disk'
         else:
             self.index = self._make_index_train(self.config['listfile'])
 
@@ -60,21 +55,14 @@ class SARRARP50Dataset(Dataset):
         index = []
         for sample in all_samples:
             img_path = f"{dirname(dirname(sample))}/rgb/{basename(sample)}"
-
-            if self.load_strategy == 'ram':
-                img, label = [np.array(Image.open(x)) for x in [img_path, sample]]
-                index.append((img, label))
-
-            elif self.load_strategy == 'disk':
-                index.append((img_path, sample))
+            index.append((img_path, sample))
         return index
 
     def _train_getitem(self, index):
 
         img, label = self.index[index]
-        if self.load_strategy == 'disk':
-            img = Image.open(img)
-            label = Image.open(label)
+        img = Image.open(img)
+        label = Image.open(label)
 
         img, label = self.img_transforms(img, label)
         # Remove channel dimension
@@ -153,6 +141,6 @@ class SARRARP50DataModule(pl.LightningDataModule):
             batch_size=1,
             shuffle=False,
             num_workers=test_dataset_cfg['num_workers'],
-            pin_memory=True,
+            pin_memory=False,
             drop_last=False
         )

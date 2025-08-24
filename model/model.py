@@ -7,10 +7,9 @@ import torch.nn.functional as F
 from torch import nn
 from omegaconf import DictConfig
 
-from model.modeling.backbone import Backbone, build_backbone
-from model.modeling.meta_arch import build_sem_seg_head
-from model.modeling.postprocessing import sem_seg_postprocess
-from model.modeling.structures import Boxes, ImageList, Instances, BitMasks
+
+from detectron2.layers import ShapeSpec
+from detectron2.modeling import build_backbone, build_sem_seg_head
 
 from model.modeling.criterion import SetCriterion
 from model.modeling.matcher import HungarianMatcher
@@ -33,30 +32,31 @@ class ToolSegmenterModel(nn.Module):
             size_divisibility: Some backbones require the input height and width to be divisible by a
                 specific integer. We can use this to override such requirement.
         """
-        self.backbone = build_backbone(cfg)
+        super().__init__()
+        self.backbone = build_backbone(cfg, input_shape=ShapeSpec(channels=3, height=640, width=640))
         self.sem_seg_head = build_sem_seg_head(cfg, self.backbone.output_shape())
 
         # Loss parameters:
-        deep_supervision = cfg.MASK_FORMER.DEEP_SUPERVISION
-        no_object_weight = cfg.MASK_FORMER.NO_OBJECT_WEIGHT
+        deep_supervision = cfg.MODEL.MASK_FORMER.DEEP_SUPERVISION
+        no_object_weight = cfg.MODEL.MASK_FORMER.NO_OBJECT_WEIGHT
 
         # loss weights
-        class_weight = cfg.MASK_FORMER.CLASS_WEIGHT
-        dice_weight = cfg.MASK_FORMER.DICE_WEIGHT
-        mask_weight = cfg.MASK_FORMER.MASK_WEIGHT
+        class_weight = cfg.MODEL.MASK_FORMER.CLASS_WEIGHT
+        dice_weight = cfg.MODEL.MASK_FORMER.DICE_WEIGHT
+        mask_weight = cfg.MODEL.MASK_FORMER.MASK_WEIGHT
 
         # building criterion
         matcher = HungarianMatcher(
             cost_class=class_weight,
             cost_mask=mask_weight,
             cost_dice=dice_weight,
-            num_points=cfg.MASK_FORMER.TRAIN_NUM_POINTS,
+            num_points=cfg.MODEL.MASK_FORMER.TRAIN_NUM_POINTS,
         )
 
         weight_dict = {"loss_ce": class_weight, "loss_mask": mask_weight, "loss_dice": dice_weight}
 
         if deep_supervision:
-            dec_layers = cfg.MASK_FORMER.DEC_LAYERS
+            dec_layers = cfg.MODEL.MASK_FORMER.DEC_LAYERS
             aux_weight_dict = {}
             for i in range(dec_layers - 1):
                 aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
@@ -70,19 +70,19 @@ class ToolSegmenterModel(nn.Module):
             weight_dict=weight_dict,
             eos_coef=no_object_weight,
             losses=losses,
-            num_points=cfg.MASK_FORMER.TRAIN_NUM_POINTS,
-            oversample_ratio=cfg.MASK_FORMER.OVERSAMPLE_RATIO,
-            importance_sample_ratio=cfg.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO,
+            num_points=cfg.MODEL.MASK_FORMER.TRAIN_NUM_POINTS,
+            oversample_ratio=cfg.MODEL.MASK_FORMER.OVERSAMPLE_RATIO,
+            importance_sample_ratio=cfg.MODEL.MASK_FORMER.IMPORTANCE_SAMPLE_RATIO,
         )
 
-        self.num_queries = cfg.MASK_FORMER.NUM_OBJECT_QUERIES
+        self.num_queries = cfg.MODEL.MASK_FORMER.NUM_OBJECT_QUERIES
         self.criterion = criterion
-        self.size_divisibility = cfg.MASK_FORMER.SIZE_DIVISIBILITY
+        self.size_divisibility = cfg.MODEL.MASK_FORMER.SIZE_DIVISIBILITY
         if self.size_divisibility < 0:
             # use backbone size_divisibility if not set
             self.size_divisibility = self.backbone.size_divisibility
-        self.overlap_threshold = cfg.MASK_FORMER.TEST.OVERLAP_THRESHOLD,
-        self.object_mask_threshold = cfg.MASK_FORMER.TEST.OBJECT_MASK_THRESHOLD,
+        self.overlap_threshold = cfg.MODEL.MASK_FORMER.TEST.OVERLAP_THRESHOLD
+        self.object_mask_threshold = cfg.MODEL.MASK_FORMER.TEST.OBJECT_MASK_THRESHOLD
 
     def forward(self, img):
         """
@@ -110,34 +110,10 @@ class ToolSegmenterModel(nn.Module):
                     segments_info (list[dict]): Describe each segment in `panoptic_seg`.
                         Each dict contains keys "id", "category_id", "isthing".
         """
-
         features = self.backbone(img)
         outputs = self.sem_seg_head(features)
         return outputs
 
-    def training_step(self, batch, batch_idx):
-        images, targets = batch
-        outputs = self.forward(images)
-        # mask classification target
-        if "instances" in batched_inputs[0]:
-            gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
-            targets = self.prepare_targets(gt_instances, images)
-        else:
-            targets = None
-
-        # bipartite matching-based loss
-        losses = self.criterion(outputs, targets)
-
-        for k in list(losses.keys()):
-            if k in self.criterion.weight_dict:
-                losses[k] *= self.criterion.weight_dict[k]
-            else:
-                # remove this loss if not specified in `weight_dict`
-                losses.pop(k)
-        return losses
-
-    def validation_step(self, batch, batch_idx):
-        pass
 
     def test_step(self, batch, batch_idx):
         images, batched_inputs = batch
@@ -165,7 +141,7 @@ class ToolSegmenterModel(nn.Module):
             processed_results[-1]["sem_seg"] = r
 
     def prepare_targets(self, targets, images):
-        h_pad, w_pad = images.tensor.shape[-2:]
+        h_pad, w_pad = images.shape[-2:]
         new_targets = []
         for targets_per_image in targets:
             # pad gt

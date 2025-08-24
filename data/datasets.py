@@ -54,6 +54,9 @@ class SARRARP50Dataset(Dataset):
             label = Image.open(label)
 
         img, label = self.img_transforms(img, label)
+        # Remove channel dimension
+        label = label[0].unsqueeze(0)
+
         # Safety check
         # overlay = overlay_segmentation(img, label, label, 10)
         # Image.fromarray(overlay).save(f"transformed_img_{index}.png")

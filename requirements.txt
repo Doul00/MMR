@@ -9,4 +9,5 @@ monai
 tensorboard
 matplotlib<3.10
 scipy
+opencv-python-headless
 detectron2 @ git+https://github.com/facebookresearch/detectron2.git@d38d7161247e64276d4c44d9d0605291e80bd969

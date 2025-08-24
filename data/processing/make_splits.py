@@ -105,10 +105,7 @@ if __name__ == '__main__':
 
     added_videos = set()
     video_datasets = get_video_datasets(args.root_dir)
-    with open(join(args.output_dir, 'full_train_list.txt'), 'w') as f:
-        for dset in video_datasets:
-            listfile = dset.generate_listfile()
-            f.write("\n".join(listfile))
+    os.makedirs(args.output_dir, exist_ok=True)
 
     for i in range(args.num_splits):
         print(f"\n\n=== Stats for split {i} ===")

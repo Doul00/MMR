@@ -161,7 +161,6 @@ def get_transform(name: str, **kwargs) -> nn.Module:
     Returns:
         nn.Module: The transform instance
     """
-    print(f"Getting transform: {name} with kwargs: {kwargs}")
     if name == 'resize':
         return Resize(**kwargs)
     elif name == 'normalize':

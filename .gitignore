@@ -206,3 +206,4 @@ Dockerfile
 .hydra/
 *.pyc
 __pycache__/
+*.log

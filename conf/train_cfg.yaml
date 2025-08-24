@@ -3,75 +3,115 @@ exp_name: CLI_PARAM
 log_dir: CLI_PARAM
 
 training_opts:
-    max_epochs: 100
-    batch_size: 16
+    max_epochs: 1000
     learning_rate: 0.001
-    weight_decay: 0.0001
     optimizer: adam
-    scheduler: cosine
+    scheduler: plateau
     seed: 42
 
 data_opts:
   train_dataset:
-    batch_size: 128
-    num_workers: 0
+    batch_size: 8 
+    num_workers: 8
     load_strategy: 'disk'
     listfile: CLI_PARAM
     img_transforms:
       - name : resize
-        size: [640, 640]
+        size: [512, 960]
       - name: to_tensor 
       - name: normalize
         mean: 0.5
         std: 0.5
       - name: random_horizontal_flip
-        p: 0.1
-      - name: random_vertical_flip
-        p: 1
+        p: 0.25
       - name: random_gaussian_blur
-        p: 1
-        kernel_size: 3
+        p: 0.25
+        kernel_sizes: [3, 5, 7]
       - name: random_color_jitter
-        p: 1
+        p: 0.25
         brightness: 0.2
         contrast: 0.2
         saturation: 0.2
 
   val_dataset:
-    batch_size: 32
-    num_workers: 0
+    batch_size: 8
+    num_workers: 8
     listfile: CLI_PARAM
     load_strategy: 'disk'
     img_transforms:
       - name : resize
-        size: [640, 640]
+        size: [512, 960]
       - name: to_tensor 
       - name: normalize
         mean: 0.5
         std: 0.5
 
 model_opts:
-  MASK_FORMER:
-    # loss
-    DEEP_SUPERVISION: True
-    NO_OBJECT_WEIGHT: 0.1
-    CLASS_WEIGHT: 1.0
-    DICE_WEIGHT: 1.0
-    MASK_WEIGHT: 20.0
+  MODEL:
+    BACKBONE:
+      NAME: "D2SwinTransformer"
 
-    # transformer config
-    NHEADS: 8
-    DROPOUT: 0.1
-    DIM_FEEDFORWARD: 2048
-    ENC_LAYERS: 0
-    DEC_LAYERS: 6
-    PRE_NORM: False
-    HIDDEN_DIM: 256
-    NUM_OBJECT_QUERIES: 10
+    MASK_FORMER:
+      # loss
+      DEEP_SUPERVISION: True
+      NO_OBJECT_WEIGHT: 0.1
+      CLASS_WEIGHT: 1.0
+      DICE_WEIGHT: 5.0
+      MASK_WEIGHT: 5.0
 
-    TRANSFORMER_IN_FEATURE: "res5"
-    ENFORCE_INPUT_PROJ: False
+      # transformer config
+      TRANSFORMER_DECODER_NAME: "MultiScaleMaskedTransformerDecoder"
+      TRANSFORMER_IN_FEATURE: "multi_scale_pixel_decoder"
+      NHEADS: 8
+      DROPOUT: 0.1
+      DIM_FEEDFORWARD: 512
+      ENC_LAYERS: 0
+      DEC_LAYERS: 6
+      PRE_NORM: False
+      HIDDEN_DIM: 256
+      NUM_OBJECT_QUERIES: 64
+      SIZE_DIVISIBILITY: 32
+      ENFORCE_INPUT_PROJ: False
 
-    TRAIN_NUM_POINTS: 12544
-    OVERSAMPLE_RATIO: 3.0
-    IMPORTANCE_SAMPLE_RATIO: 0.75
+      TRAIN_NUM_POINTS: 12544
+      OVERSAMPLE_RATIO: 3.0
+      IMPORTANCE_SAMPLE_RATIO: 0.75
+
+      TEST:
+        OVERLAP_THRESHOLD: 0.8
+        OBJECT_MASK_THRESHOLD: 0.8
+
+    # Swin Transformer config
+    # swin transformer backbone
+    SWIN:
+      PRETRAIN_IMG_SIZE: 224
+      PATCH_SIZE: 4
+      EMBED_DIM: 96
+      DEPTHS: [2, 2, 6, 2]
+      NUM_HEADS: [3, 6, 12, 24]
+      WINDOW_SIZE: 7
+      MLP_RATIO: 2.0
+      QKV_BIAS: True
+      QK_SCALE: null
+      DROP_RATE: 0.0
+      ATTN_DROP_RATE: 0.0
+      DROP_PATH_RATE: 0.3
+      APE: False
+      PATCH_NORM: True
+      OUT_FEATURES: ["res2", "res3", "res4", "res5"]
+      USE_CHECKPOINT: False
+
+    SEM_SEG_HEAD:
+      NAME: "MaskFormerHead"
+      IGNORE_VALUE: 255
+      NUM_CLASSES: 10
+      LOSS_WEIGHT: 1.0
+      CONVS_DIM: 256
+      MASK_DIM: 256
+      NORM: "GN"
+      # pixel decoder
+      PIXEL_DECODER_NAME: "MSDeformAttnPixelDecoder"
+      IN_FEATURES: ["res2", "res3", "res4", "res5"]
+      DEFORMABLE_TRANSFORMER_ENCODER_IN_FEATURES: ["res3", "res4", "res5"]
+      COMMON_STRIDE: 4
+      TRANSFORMER_ENC_LAYERS: 6

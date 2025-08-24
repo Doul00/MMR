@@ -1,12 +1,9 @@
-
-import yaml
+"""
+@brief: Torch model for tool segmentation.
+"""
 import torch
-import pytorch_lightning as pl
 import torch.nn.functional as F
-
 from torch import nn
-from omegaconf import DictConfig
-
 
 from detectron2.layers import ShapeSpec
 from detectron2.modeling import build_backbone, build_sem_seg_head
@@ -19,21 +16,10 @@ from model.modeling.matcher import HungarianMatcher
 class ToolSegmenterModel(nn.Module):
     def __init__(self, cfg):
         """
-        Args:
-            backbone: a backbone module, must follow detectron2's backbone interface
-            sem_seg_head: a module that predicts semantic segmentation from backbone features
-            criterion: a module that defines the loss
-            num_queries: int, number of queries
-            object_mask_threshold: float, threshold to filter query based on classification score
-                for panoptic segmentation inference
-            overlap_threshold: overlap threshold used in general inference for panoptic segmentation
-            metadata: dataset meta, get `thing` and `stuff` category names for panoptic
-                segmentation inference
-            size_divisibility: Some backbones require the input height and width to be divisible by a
-                specific integer. We can use this to override such requirement.
+        ToolSegmentation model with a SwinUNet backbone and a MaskFormer head.
         """
         super().__init__()
-        self.backbone = build_backbone(cfg, input_shape=ShapeSpec(channels=3, height=640, width=640))
+        self.backbone = build_backbone(cfg, input_shape=ShapeSpec(channels=3))
         self.sem_seg_head = build_sem_seg_head(cfg, self.backbone.output_shape())
 
         # Loss parameters:
@@ -45,7 +31,6 @@ class ToolSegmenterModel(nn.Module):
         dice_weight = cfg.MODEL.MASK_FORMER.DICE_WEIGHT
         mask_weight = cfg.MODEL.MASK_FORMER.MASK_WEIGHT
 
-        # building criterion
         matcher = HungarianMatcher(
             cost_class=class_weight,
             cost_mask=mask_weight,
@@ -77,70 +62,20 @@ class ToolSegmenterModel(nn.Module):
 
         self.num_queries = cfg.MODEL.MASK_FORMER.NUM_OBJECT_QUERIES
         self.criterion = criterion
-        self.size_divisibility = cfg.MODEL.MASK_FORMER.SIZE_DIVISIBILITY
-        if self.size_divisibility < 0:
-            # use backbone size_divisibility if not set
-            self.size_divisibility = self.backbone.size_divisibility
         self.overlap_threshold = cfg.MODEL.MASK_FORMER.TEST.OVERLAP_THRESHOLD
         self.object_mask_threshold = cfg.MODEL.MASK_FORMER.TEST.OBJECT_MASK_THRESHOLD
 
     def forward(self, img):
         """
         Args:
-            batched_inputs: a list, batched outputs of :class:`DatasetMapper`.
-                Each item in the list contains the inputs for one image.
-                For now, each item in the list is a dict that contains:
-                   * "image": Tensor, image in (C, H, W) format.
-                   * "instances": per-region ground truth
-                   * Other information that's included in the original dicts, such as:
-                     "height", "width" (int): the output resolution of the model (may be different
-                     from input resolution), used in inference.
-        Returns:
-            list[dict]:
-                each dict has the results for one image. The dict contains the following keys:
-
-                * "sem_seg":
-                    A Tensor that represents the
-                    per-pixel segmentation prediced by the head.
-                    The prediction has shape KxHxW that represents the logits of
-                    each class for each pixel.
-                * "panoptic_seg":
-                    A tuple that represent panoptic output
-                    panoptic_seg (Tensor): of shape (height, width) where the values are ids for each segment.
-                    segments_info (list[dict]): Describe each segment in `panoptic_seg`.
-                        Each dict contains keys "id", "category_id", "isthing".
+            img: a tensor of shape (B, C, H, W)
         """
         features = self.backbone(img)
         outputs = self.sem_seg_head(features)
         return outputs
 
-
-    def test_step(self, batch, batch_idx):
-        images, batched_inputs = batch
-        outputs = self.forward(batched_inputs)
-        mask_cls_results = outputs["pred_logits"]
-        mask_pred_results = outputs["pred_masks"]
-        # upsample masks
-        mask_pred_results = F.interpolate(
-            mask_pred_results,
-            size=(images.tensor.shape[-2], images.tensor.shape[-1]),
-            mode="bilinear",
-            align_corners=False,
-        )
-
-        del outputs
-
-        processed_results = []
-        for mask_cls_result, mask_pred_result, input_per_image, image_size in zip(
-            mask_cls_results, mask_pred_results, batched_inputs, images.image_sizes
-        ):
-            height = input_per_image.get("height", image_size[0])
-            width = input_per_image.get("width", image_size[1])
-            processed_results.append({})
-            r = self.semantic_inference(mask_cls_result, mask_pred_result)
-            processed_results[-1]["sem_seg"] = r
-
     def prepare_targets(self, targets, images):
+        """Optional padding of the targets to the input image size."""
         h_pad, w_pad = images.shape[-2:]
         new_targets = []
         for targets_per_image in targets:
@@ -157,6 +92,16 @@ class ToolSegmenterModel(nn.Module):
         return new_targets
 
     def semantic_inference(self, mask_cls, mask_pred):
+        """
+        Performs a weighted sum of the confidence scores from the queries with the predicted masks.
+        With K the number of classes and Q the number of queries:
+        Args:
+            mask_cls: a tensor of shape (Q, K+1) containing the logits of the classification scores
+            mask_pred: a tensor of shape (Q, H, W) containing the logits of the segmentation masks
+        Returns:
+            a tensor of shape (K, H, W) containing the logits of the segmentation masks
+        """
+        # Remove no object class
         mask_cls = F.softmax(mask_cls, dim=-1)[..., :-1]
         mask_pred = mask_pred.sigmoid()
         semseg = torch.einsum("qc,qhw->chw", mask_cls, mask_pred)

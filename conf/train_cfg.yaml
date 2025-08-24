@@ -2,9 +2,13 @@
 exp_name: CLI_PARAM
 log_dir: CLI_PARAM
 
+testing_opts:
+  test_minibatch_size: 32
+  final_image_size_hw: [1080, 1920]
+
 training_opts:
-    max_epochs: 1000
-    learning_rate: 0.001
+    max_epochs: 100
+    learning_rate: 0.0005
     optimizer: adam
     scheduler: plateau
     seed: 42
@@ -18,10 +22,6 @@ data_opts:
     img_transforms:
       - name : resize
         size: [512, 960]
-      - name: to_tensor 
-      - name: normalize
-        mean: 0.5
-        std: 0.5
       - name: random_horizontal_flip
         p: 0.25
       - name: random_gaussian_blur
@@ -32,9 +32,26 @@ data_opts:
         brightness: 0.2
         contrast: 0.2
         saturation: 0.2
+      - name: to_tensor 
+      - name: normalize
+        mean: 0.5
+        std: 0.5
 
   val_dataset:
-    batch_size: 8
+    batch_size: 16
+    num_workers: 8
+    listfile: CLI_PARAM
+    load_strategy: 'disk'
+    img_transforms:
+      - name : resize
+        size: [512, 960]
+      - name: to_tensor 
+      - name: normalize
+        mean: 0.5
+        std: 0.5
+
+  test_dataset:
+    batch_size: 1
     num_workers: 8
     listfile: CLI_PARAM
     load_strategy: 'disk'
@@ -54,10 +71,10 @@ model_opts:
     MASK_FORMER:
       # loss
       DEEP_SUPERVISION: True
-      NO_OBJECT_WEIGHT: 0.1
-      CLASS_WEIGHT: 1.0
-      DICE_WEIGHT: 5.0
-      MASK_WEIGHT: 5.0
+      NO_OBJECT_WEIGHT: 0.05
+      CLASS_WEIGHT: 0.2
+      DICE_WEIGHT: 1.0
+      MASK_WEIGHT: 1.0
 
       # transformer config
       TRANSFORMER_DECODER_NAME: "MultiScaleMaskedTransformerDecoder"

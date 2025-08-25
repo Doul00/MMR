@@ -8,6 +8,7 @@ Repo architecture:
 - model: Model architecture
 - helpers: Utils functions
 - scripts: Scripts for training / testing and data processing
+- results: CSV files with results per fold
 - weights: Model weights (Not pushed to the repo but will be shared separately)
 
 ## Installation

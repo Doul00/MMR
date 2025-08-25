@@ -1,5 +1,9 @@
 #!/bin/bash
 
+#######################
+# Generate data splits for the Mask2Former model
+#######################
+
 CURR_PATH=$(realpath $0)
 ROOT_DIR=$(dirname $(dirname $(dirname $CURR_PATH)))
 export PYTHONPATH=$ROOT_DIR

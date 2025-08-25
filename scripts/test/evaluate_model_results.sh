@@ -2,6 +2,12 @@
 
 #######################
 # Evaluate the model results
+# $PREDICTIONS_DIR and DATA_DIR follow the format: 
+# pred_root_dir
+# |-- video_41
+# |   |-- segmentation
+# |   |   |--- 000000xxxxx.png
+#
 #######################
 
 EXP_NAME=train-m2f-full-no-aug

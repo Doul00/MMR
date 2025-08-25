@@ -13,7 +13,6 @@ def extract_zip(zip_path, out_dir):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(out_dir)
 
-
 if __name__ == '__main__':
     data_dir = sys.argv[1]
     zip_files = [os.path.join(root, file)

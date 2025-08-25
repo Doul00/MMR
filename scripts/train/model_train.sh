@@ -2,14 +2,12 @@
 
 #######################
 # Train the Mask2Former model
+# Results will be saved user $LOG_DIR/$EXP_NAME
 #######################
 
 ROOT_DIR=$(dirname $(dirname $(dirname $(realpath $0))))
 
 LOG_DIR=/nfs/home/aamadou/Projects/MMR/output/logs
-
-# DEBUG_TRAIN_FILE=$ROOT_DIR/data/splits_final/debug/train.txt
-# DEBUG_VAL_FILE=$ROOT_DIR/data/splits_final/debug/val.txt
 
 FOLD_NUM=$1
 FOLD_TRAIN_FILE=$ROOT_DIR/data/splits_final/fold_${FOLD_NUM}/train.txt

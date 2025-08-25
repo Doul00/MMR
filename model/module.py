@@ -107,7 +107,7 @@ class ToolSegmenterModule(pl.LightningModule):
 
         # Log results to tensorboard for visualization
         if batch_idx % 10 == 0:
-            processed_results = self._postprocess_outputs(outputs, (imgs.shape[-2], imgs.shape[-1]), "bilinear")
+            processed_results = self._postprocess_outputs(outputs, (imgs.shape[-2], imgs.shape[-1]), "bilinear", imgs.device)
             processed_results = torch.stack([result.argmax(dim=0) for result in processed_results])
             rand_indexes = torch.randint(0, len(processed_results), (3,))
             all_overlays = []
@@ -154,7 +154,7 @@ class ToolSegmenterModule(pl.LightningModule):
         del outputs
 
         resize_sz = [self._test_final_image_size_hw[0], self._test_final_image_size_hw[1]]
-        processed_results = self._postprocess_outputs(merged_outputs, resize_sz, "bilinear")
+        processed_results = self._postprocess_outputs(merged_outputs, resize_sz, "bilinear", "cpu")
         processed_results = torch.stack([result.argmax(dim=0) for result in processed_results])
 
         preds_dir = self._test_save_dir + "/predictions"
@@ -179,7 +179,7 @@ class ToolSegmenterModule(pl.LightningModule):
 
 
     @torch.no_grad()
-    def _postprocess_outputs(self, outputs: Dict[str, torch.Tensor], resize_sz: Tuple[int, int], interp_mode: str) -> torch.Tensor:
+    def _postprocess_outputs(self, outputs: Dict[str, torch.Tensor], resize_sz: Tuple[int, int], interp_mode: str, interp_device: str) -> torch.Tensor:
         """
         Args:
             outputs: a dict containing the following keys:
@@ -191,35 +191,18 @@ class ToolSegmenterModule(pl.LightningModule):
         Returns:
             a tensor of shape (B, K, H, W) containing the logits of the segmentation masks
         """
-        mask_cls_results = outputs["pred_logits"].to('cpu')
-        mask_pred_results = outputs["pred_masks"].to('cpu')
+        mask_cls_results = outputs["pred_logits"].to(interp_device)
+        mask_pred_results = outputs["pred_masks"].to(interp_device)
 
         upsampled_results = []
         align_corners = False if interp_mode in ['bilinear', 'bicubic'] else None
-
-        # Prevent OOMs when upsampling
-        # upsampling_bs = 4
-        # num_batches = mask_pred_results.shape[0] // self._test_minibatch_size
-        # if mask_pred_results.shape[0] % self._test_minibatch_size != 0:
-        #     num_batches += 1
-
-        # for i in range(num_batches):
-        #     mask_pred_results_batch = mask_pred_results[i * self._test_minibatch_size:(i + 1) * self._test_minibatch_size]
-        #     mask_pred_results_batch = F.interpolate(
-        #         mask_pred_results_batch,
-        #         size=resize_sz,
-        #         mode=interp_mode,
-        #         align_corners=align_corners,
-        #     )
-        #     upsampled_results.append(mask_pred_results_batch.to('cpu'))
-        # upsampled_results = torch.cat(upsampled_results, dim=0) # (B, Q, H, W)
 
         upsampled_results = F.interpolate(
             mask_pred_results,
             size=resize_sz,
             mode=interp_mode,
             align_corners=align_corners,
-        ).to('cpu')
+        )
 
         processed_results = []
         for mask_cls_result, mask_pred_result in zip(
@@ -228,8 +211,7 @@ class ToolSegmenterModule(pl.LightningModule):
 
             # on GPU for einsum
             r = self.model.semantic_inference(mask_cls_result.to('cuda'), mask_pred_result.to('cuda'))
-            r = r.to('cpu')
-            processed_results.append(r)
+            processed_results.append(r.to(interp_device))
 
         return processed_results
 

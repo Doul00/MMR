@@ -1,5 +1,5 @@
 """
-@brief: Image transform utils. Reimplements most transforms to handle joint masks and images augmentations.
+@brief: Image transform utils. Reimplements some transforms to handle joint masks and images augmentations.
 """
 
 import torch

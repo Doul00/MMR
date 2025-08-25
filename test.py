@@ -1,5 +1,5 @@
 """
-@brief: Main testing script
+@brief: Script used to generate model predictions
 """
 
 import os

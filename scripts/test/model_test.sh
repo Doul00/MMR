@@ -7,9 +7,10 @@
 
 ROOT_DIR=$(dirname $(dirname $(dirname $(realpath $0))))
 
+FOLD=$1
 LOG_DIR=/nfs/home/aamadou/Projects/MMR/output/logs
 TEST_LISTFILE=$ROOT_DIR/data/splits_final/test.txt
-CHECKPOINT_PATH="/nfs/home/aamadou/Projects/MMR/output/logs/train-m2f-full-aug/weights/best.ckpt"
+CHECKPOINT_PATH=/nfs/home/aamadou/Projects/MMR/output/logs/train-m2f-full-aug-fold-${FOLD}/weights/best.ckpt
 
 # Compile and install custom DeformableAttention CUDA kernel
 # You can comment it if done once - left uncommented as this needs to be done everytime

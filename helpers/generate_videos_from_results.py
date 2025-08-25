@@ -32,7 +32,7 @@ def generate_video_for_folder(imgs_dir, gt_dir, pred_dir, output_dir, fps):
     assert len(gt_seg) == len(pred_seg), f"Incomplete predictions for video at path {imgs_dir}"
     imgs = [os.path.join(imgs_dir, basename(x)) for x in gt_seg]
 
-    # High-res overlay generation is very slow, so we use multiprocessing
+    # High-res overlay generation is slow
     with Pool(processes=32) as pool:
         output_overlays = pool.starmap(generate_overlay, zip(imgs, gt_seg, pred_seg))
 
@@ -54,16 +54,9 @@ if __name__ == "__main__":
     pred_root_dir = args.pred_root_dir
     os.makedirs(args.output_dir, exist_ok=True)
 
-    proc_args = []
-    for video_name in ["video_50"]: # in os.listdir(pred_root_dir):
+    for video_name in os.listdir(pred_root_dir):
         imgs_dir = os.path.join(gt_root_dir, video_name, 'rgb')
         gt_dir = os.path.join(gt_root_dir, video_name, 'segmentation')
         pred_dir = os.path.join(pred_root_dir, video_name, 'segmentation')
         output_dir = os.path.join(args.output_dir, video_name)
-        proc_args.append((imgs_dir, gt_dir, pred_dir, output_dir, args.fps))
-        break
-
-    generate_video_for_folder(*proc_args[0])
-    # with Pool(processes=8) as pool:
-    #     pool.starmap(generate_video_for_folder, proc_args)
-
+        generate_video_for_folder(imgs_dir, gt_dir, pred_dir, output_dir, args.fps)

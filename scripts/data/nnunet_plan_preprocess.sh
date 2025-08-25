@@ -1,5 +1,9 @@
 #!/bin/bash
 
+#######################
+# Prepare nnUnet training
+#######################
+
 ROOT_DIR=$(dirname $(dirname $(pwd)))/code
 export PYTHONPATH=$ROOT_DIR
 

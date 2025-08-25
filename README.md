@@ -48,6 +48,7 @@ path_to_root_data_dir
 
 ### Mask2Former model
 - Use `scripts/test/model_test.sh` and update the path to the checkpoint.
+- Merge predictions using  `helpers/merge_predictions.py`
 
 ### nnUnet
 - Used the commands printed by `nnunet_best_cfg.sh`. An example script is provided in `scripts/test/nnunet_eval.sh`
@@ -60,9 +61,9 @@ path_to_root_data_dir
 
 ## Results
 
-| method             | metric | video_41 | video_42 | video_43 | video_44 | video_45 | video_46 | video_47 | video_48 | video_49 | video_50 |
-|--------------------|--------|----------|----------|----------|----------|----------|----------|----------|----------|----------|----------|
-| M2F (ensemble)     | mIoU   | 0.807    | 0.760    |  0.767   |  0.734   |  0.779   |  0.764   |  0.781   |  0.830   |  0.709   |  0.766   |
-|                    | mNSD   | 0.825    | 0.783    |  0.785   |  0.768   |  0.837   |  0.808   |  0.830   |  0.860   |  0.747   |  0.836   |
-| nnUNet (ensemble)  | mIoU   |    -     |    -     |    -     |     -    |     -    |    -     |    -     |    -     |    -     |     -    |
-|                    | mNSD   |    -     |    -     |    -     |     -    |     -    |    -     |    -     |    -     |    -     |     -    |
+| method             | metric | video_41 | video_42 | video_43 | video_44 | video_45 | video_46 | video_47 | video_48 | video_49 | video_50 |  mean  |
+|--------------------|--------|----------|----------|----------|----------|----------|----------|----------|----------|----------|----------|--------|
+| M2F (ensemble)     | mIoU   |   0.807  |   0.760  |   0.767  |   0.734  |  0.779   |  0.764   |  0.781   |  0.830   |  0.709   |  0.766   | 0.770  |
+|                    | mNSD   |   0.825  |   0.783  |   0.785  |   0.768  |  0.837   |  0.808   |  0.830   |  0.860   |  0.747   |  0.836   | 0.810  |
+| nnUNet (ensemble)  | mIoU   |   0.845  |   0.767  |   0.802  |   0.741  |  0.808   |  0.802   |  0.787   |  0.859   |  0.758   |  0.823   | 0.800  |
+|                    | mNSD   |   0.870  |   0.795  |   0.829  |   0.775  |  0.861   |  0.842   |  0.836   |  0.887   |  0.801   |  0.892   | 0.840  |

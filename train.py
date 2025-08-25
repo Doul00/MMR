@@ -29,6 +29,7 @@ def main(cfg: DictConfig):
 
     log_dir = cfg.log_dir + "/" + cfg.exp_name
     os.makedirs(log_dir, exist_ok=True)
+    print(f"Results will be saved to {log_dir}")
 
     with open(log_dir + "/train_cfg.yaml", "w") as f:
         OmegaConf.save(cfg, f)

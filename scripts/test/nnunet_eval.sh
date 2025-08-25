@@ -13,8 +13,8 @@ INPUT_FOLDER=/nfs/home/aamadou/Data/nnUnet_imagesTs_rest
 OUTPUT_FOLDER=/nfs/home/aamadou/Projects/MMR/output/test_results/nnunet_predict
 OUTPUT_FOLDER_PP=/nfs/home/aamadou/Projects/MMR/output/test_results/nnunet_predict_pp
 
-# echo "Predicting..."
-# nnUNetv2_predict -d Dataset999_SARRARP50 -i $INPUT_FOLDER -o $OUTPUT_FOLDER -f  0 1 2 3 4 -tr nnUNetTrainer -c 2d -p nnUNetPlans -npp 16 -nps 16 --save_probabilities
+echo "Predicting..."
+nnUNetv2_predict -d Dataset999_SARRARP50 -i $INPUT_FOLDER -o $OUTPUT_FOLDER -f  0 1 2 3 4 -tr nnUNetTrainer -c 2d -p nnUNetPlans -npp 16 -nps 16
 
 echo "Prediction done! Applying postprocessing..."
 nnUNetv2_apply_postprocessing -i $OUTPUT_FOLDER -o $OUTPUT_FOLDER_PP \

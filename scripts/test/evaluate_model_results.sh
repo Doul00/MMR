@@ -10,7 +10,7 @@
 #
 #######################
 
-EXP_NAME=train-m2f-full-no-aug
+EXP_NAME=$1
 DATA_DIR=/nfs/home/aamadou/Data/SAR_RARP50/raw/test
 PREDICTIONS_DIR=/nfs/home/aamadou/Projects/MMR/output/logs/${EXP_NAME}/weights/predictions
 SAR_RARP50_REPO_DIR=/nfs/home/aamadou/Projects/SAR_RARP50-evaluation

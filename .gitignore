@@ -207,3 +207,4 @@ Dockerfile
 *.pyc
 __pycache__/
 *.log
+weights/

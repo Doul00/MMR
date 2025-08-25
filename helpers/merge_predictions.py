@@ -27,12 +27,10 @@ def majority_vote(seg_masks: np.ndarray) -> np.ndarray:
         lambda x: np.bincount(x, minlength=num_classes),
         axis=0,
         arr=seg_masks_flat
-    )  # shape (H*W, num_classes)
-
-    # Take argmax (most common label per pixel)
-    majority = counts.argmax(axis=1)
+    )
+    majority = counts.argmax(axis=0)
     majority = majority.reshape(H, W)[..., None]
-    majority = np.repeat(majority, 3, axis=-1)
+    majority = np.repeat(majority, 3, axis=-1).astype(np.uint8)
     return majority
 
 
@@ -46,7 +44,7 @@ def ensemble_predictions(subpath, root_dirs, output_dir):
     """
     pred_files = [os.path.join(root_dir, subpath) for root_dir in root_dirs]
     pred_masks = [np.array(Image.open(pred_file))[..., 0] for pred_file in pred_files]
-    pred_masks = np.stack(pred_masks).astype(np.uint8)
+    pred_masks = np.stack(pred_masks)
     ensemble_mask = majority_vote(pred_masks)
     dst_file = os.path.join(output_dir, subpath)
     os.makedirs(os.path.dirname(dst_file), exist_ok=True)
@@ -61,9 +59,9 @@ if __name__ == "__main__":
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    pred_files = [os.path.join(root_dir, f) for root_dir, _, files in os.walk(args.root_dir[0])
+    pred_files = [os.path.join(root_dir, f) for root_dir, _, files in os.walk(args.root_dirs[0])
                                         for f in files if f.endswith('.png')]
-    subpaths = [f.replace(args.root_dirs[0], '') for f in pred_files]
+    subpaths = [f.replace(args.root_dirs[0] + "/", '') for f in pred_files]
     pool_args = [(subpath, args.root_dirs, args.output_dir) for subpath in subpaths]
     with Pool(processes=32) as pool:
         pool.starmap(ensemble_predictions, pool_args)

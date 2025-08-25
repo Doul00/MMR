@@ -1,5 +1,5 @@
 """
-@brief: Extracts all zip files containing the video data
+@brief: Extracts all zip files containing the video challenge data
 """
 
 import os

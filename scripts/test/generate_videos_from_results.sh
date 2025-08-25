@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #######################
-# Generate videos from the model results
+# Generate videos from predictions 
 # Expects the results directory to be in the format:
 # pred_root_dir
 # |-- video_41
@@ -10,7 +10,7 @@
 #######################
 
 ROOT_DIR=$(dirname $(dirname $(dirname $(realpath $0))))
-EXP_NAME=train-m2f-full-no-aug
+EXP_NAME=train-m2f-full-aug-fold-0
 OUTPUT_DIR=/nfs/home/aamadou/Projects/MMR/output/test_results/$EXP_NAME/videos
 
 export PYTHONPATH=$ROOT_DIR:$PYTHONPATH

@@ -6,7 +6,7 @@ Repo architecture:
 - model: Model architecture
 - helpers: Utils functions
 - scripts: Scripts for training / testing and data processing
-- weights: Model weights (Not pushed to the repo but included in the zipfile)
+- weights: Model weights (Not pushed to the repo but will be shared separately)
 
 ## Installation
 - Run `pip install -r requirements.txt` to install dependencies
@@ -48,7 +48,16 @@ path_to_root_data_dir
 
 ### nnUnet
 - Used the commands printed by `nnunet_best_cfg.sh`. An example script is provided in `scripts/test/nnunet_eval.sh`
+- If using provided weights, use `nnUNetv2_install_pretrained_model_from_zip weights/nnunet/nnunet_best.zip`. You can then run the eval script.
 
 ## Evaluating
 - Clone the SAR_RARPO50 challenge evaluation repo `git clone https://github.com/surgical-vision/SAR_RARP50-evaluation`
 - Call `scripts/test/evaluate_model_results.sh` and update the path to your model predictions and your data directory with the labels. 
+
+
+## Results
+
+| method | metric | video_41 | video_42 | video_43 | video_44 | video_45 | video_46 | video_47 | video_48 | video_49 | video_50 |
+|--------|--------|----------|----------|----------|----------|----------|----------|----------|----------|----------|----------|
+| M2F    | mIoU   | 0.807    | 0.760    |  0.767   |  0.734   |  0.779   |  0.764   |  0.781   |  0.830   |  0.709   |  0.766   |
+|        | mNSD   | 0.825    | 0.783    |  0.785   |  0.768   |  0.837   |  0.808   |  0.830   |  0.860   |  0.747   |  0.836   |

@@ -12,7 +12,6 @@ from os.path import basename, dirname
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
-from helpers.image import overlay_segmentation
 from data.transforms import get_transforms
 
 
@@ -26,13 +25,14 @@ class SARRARP50Dataset(Dataset):
                 listfile (str): List of (segmentation) samples used by the dataset. 
                 img_transforms (list): List of image transforms.
                 label_transforms (list): List of label transforms.
-            is_test (bool): Whether the dataset is for testing - Changes the way the index is loaded since we send the full video frames
+            is_test (bool): Whether the dataset is for testing - Changes the way the index is loaded since we send the full video frames together
+             when testing.
         """
         self.config = config
         self.img_transforms = get_transforms(self.config['img_transforms'])
         self.is_test = is_test
         if self.is_test:
-            # Index only stores segmentation paths
+            # Index only stores segmentation paths in this case
             self.index = self._make_index_test(self.config['listfile'])
         else:
             self.index = self._make_index_train(self.config['listfile'])
@@ -44,7 +44,7 @@ class SARRARP50Dataset(Dataset):
             video_name = basename(dirname(dirname(sample)))
             videos_to_samples[video_name].append(sample)
 
-        # Sort
+        # Sort video frames by frame number
         for video_name, samples in videos_to_samples.items():
             videos_to_samples[video_name] = sorted(samples, key=lambda x: int(basename(x).split('.')[0]))
 
@@ -105,6 +105,8 @@ class SARRARP50Dataset(Dataset):
 
 
 class SARRARP50DataModule(pl.LightningDataModule):
+    """Lightning DataModule for SARRARP50 datasets"""
+
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
